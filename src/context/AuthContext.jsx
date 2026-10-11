@@ -11,7 +11,9 @@ export function AuthProvider({ children }) {
     const load = async () => {
       const token = localStorage.getItem('token');
       const cached = localStorage.getItem('lumen_user');
-      if (cached) { try { setUser(JSON.parse(cached)); } catch (_) {} }
+      if (cached) {
+        try { setUser(JSON.parse(cached)); } catch (_) {}
+      }
       if (token) {
         try {
           const data = await api.me();

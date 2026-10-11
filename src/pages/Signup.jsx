@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../api';
 
 export default function Signup() {
   const [params] = useSearchParams();
@@ -8,22 +9,53 @@ export default function Signup() {
   const { signup } = useAuth();
 
   const [role, setRole] = useState(params.get('role') || 'creator');
-  const [form, setForm] = useState({ name: '', handle: '', email: '', password: '', company: '' });
+  const [form, setForm] = useState({
+    name: '', handle: '', email: '', password: '', company: '',
+  });
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const fileRef = useRef(null);
 
   const change = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be under 5 MB');
+      return;
+    }
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    setError('');
+  };
 
   const submit = async (e) => {
     e.preventDefault();
     setError('');
+
     if (!form.name || !form.email || !form.password) {
       setError('Name, email, and password are required.');
       return;
     }
+    if (!form.handle) {
+      setError('Handle is required (e.g., yourname.ai)');
+      return;
+    }
+
     setLoading(true);
     try {
-      await signup({ role, ...form });
+      // 1. Upload avatar if provided
+      let avatar_url = null;
+      if (avatarFile) {
+        const uploadRes = await api.uploadFile(avatarFile);
+        avatar_url = uploadRes?.url || uploadRes?.data?.url || null;
+      }
+
+      // 2. Create account
+      await signup({ role, ...form, avatar_url });
       navigate(role === 'creator' ? '/creator' : '/brand');
     } catch (err) {
       setError(err.message || 'Something went wrong');
@@ -69,6 +101,31 @@ export default function Signup() {
         </div>
 
         <form onSubmit={submit} className="space-y-4">
+
+          {/* Profile picture uploader */}
+          <div className="flex flex-col items-center mb-2">
+            <div
+              onClick={() => fileRef.current?.click()}
+              className="w-24 h-24 rounded-full bg-nude-100 border-2 border-dashed border-nude-300 flex items-center justify-center cursor-pointer hover:border-nude-500 transition-colors overflow-hidden"
+            >
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="preview" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-3xl text-nude-400">+</span>
+              )}
+            </div>
+            <p className="text-xs text-nude-500 mt-2">
+              {avatarPreview ? 'Tap to change' : (role === 'creator' ? 'Upload profile picture' : 'Upload brand logo')}
+            </p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFile}
+              className="hidden"
+            />
+          </div>
+
           {role === 'brand' && (
             <input
               value={form.company}
@@ -85,14 +142,12 @@ export default function Signup() {
             className="input-nude"
           />
 
-          {role === 'creator' && (
-            <input
-              value={form.handle}
-              onChange={(e) => change('handle', e.target.value.replace(/\s+/g, ''))}
-              placeholder="Handle (e.g., aarav.ai)"
-              className="input-nude"
-            />
-          )}
+          <input
+            value={form.handle}
+            onChange={(e) => change('handle', e.target.value.replace(/\s+/g, '').toLowerCase())}
+            placeholder="Handle (e.g., aarav.ai)"
+            className="input-nude"
+          />
 
           <input
             type="email"
